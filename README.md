@@ -3,7 +3,7 @@
 > [!WARNING]
 > This branch contains Noctalia v4, a legacy and unmaintained version. It is no longer developed, supported, or receiving fixes. **Do not use v4 for new installations.**
 >
-> **[Noctalia v5](https://noctalia.dev/blog/announcing-noctalia-v5)** is the stable, finished, and actively supported version. Use v5 instead. Its installation instructions, documentation, and plugins are not compatible with this v4 branch.
+> **[Noctalia v5](https://docs.noctalia.dev/noctalia/getting-started/installation/)** is the stable, finished, and actively supported version. Use v5 instead. Its installation instructions, documentation, and plugins are not compatible with this v4 branch.
 
 **_quiet by design_**
 
@@ -74,7 +74,7 @@ https://github.com/user-attachments/assets/bf46f233-8d66-439a-a1ae-ab0446270f2d
 
 ## Existing v4 users
 
-Existing v4 installations may continue to work, but compatibility with current compositors, distributions, plugins, and external services is not maintained. New users should [install Noctalia v5](https://noctalia.dev/blog/announcing-noctalia-v5) instead.
+Existing v4 installations may continue to work, but compatibility with current compositors, distributions, plugins, and external services is not maintained. New users should [install Noctalia v5](https://docs.noctalia.dev/noctalia/getting-started/installation/) instead.
 
 ---
 
