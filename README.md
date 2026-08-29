@@ -1,22 +1,14 @@
 # Noctalia Shell
 
-> [!IMPORTANT]
-> We are actively working on **[Noctalia v5](https://noctalia.dev/blog/announcing-noctalia-v5)** — a full rewrite that will be entering alpha soon. As a result, issues and pull requests targeting v4 will most likely not be merged or fixed. Thank you for your patience and support!
+> [!WARNING]
+> This branch contains Noctalia v4, a legacy and unmaintained version. It is no longer developed, supported, or receiving fixes. **Do not use v4 for new installations.**
+>
+> **[Noctalia v5](https://noctalia.dev/blog/announcing-noctalia-v5)** is the stable, finished, and actively supported version. Use v5 instead. Its installation instructions, documentation, and plugins are not compatible with this v4 branch.
 
 **_quiet by design_**
 
 <p align="center">
   <img src="https://assets.noctalia.dev/noctalia-logo.svg?v=2" alt="Noctalia Logo" style="width: 192px" />
-</p>
-
-<p align="center">
-  <a href="https://docs.noctalia.dev/getting-started/installation">
-    <img
-      src="https://img.shields.io/badge/🌙_Install_Noctalia-A8AEFF?style=for-the-badge&labelColor=0C0D11"
-      alt="Install Noctalia"
-      style="height: 50px"
-    />
-  </a>
 </p>
 
 <p><br/></p>
@@ -28,9 +20,6 @@
   <a href="https://github.com/noctalia-dev/noctalia-shell/stargazers">
     <img src="https://img.shields.io/github/stars/noctalia-dev/noctalia-shell?style=for-the-badge&labelColor=0C0D11&color=A8AEFF&logo=github&logoColor=FFFFFF" alt="GitHub stars" />
   </a>
-  <a href="https://docs.noctalia.dev">
-    <img src="https://img.shields.io/badge/docs-A8AEFF?style=for-the-badge&logo=gitbook&logoColor=FFFFFF&labelColor=0C0D11" alt="Documentation" />
-  </a>
   <a href="https://discord.noctalia.dev">
     <img src="https://img.shields.io/badge/discord-A8AEFF?style=for-the-badge&labelColor=0C0D11&logo=discord&logoColor=FFFFFF" alt="Discord" />
   </a>
@@ -38,9 +27,9 @@
 
 ---
 
-## What is Noctalia?
+## About this legacy branch
 
-A beautiful, minimal desktop shell for Wayland that actually gets out of your way. Built on [Quickshell](https://quickshell.org/) (Qt/QML) with a warm lavender aesthetic that you can easily customize to match your vibe.
+This repository contains the archived Noctalia v4 desktop shell for Wayland. The feature list below describes the historical v4 implementation and is retained for existing users and reference only.
 
 **✨ Key Features:**
 - 🪟 Native support for Niri, Hyprland, Sway, Scroll, Labwc and MangoWC
@@ -51,7 +40,7 @@ A beautiful, minimal desktop shell for Wayland that actually gets out of your wa
 - 🔒 Lock screen
 - 🧩 Desktop widgets (clock, media player and more)
 - 💡 OSD for volume and brightness
-- 🔌 Nearly 100 plugins available ([explore plugins](https://noctalia.dev/plugins/))
+- 🔌 More than 100 plugins available
 - 🪄 Setup wizard for first-time users
 - ⚡ Built on Quickshell for performance
 
@@ -80,26 +69,12 @@ https://github.com/user-attachments/assets/bf46f233-8d66-439a-a1ae-ab0446270f2d
 
 - Wayland compositor (see supported compositors below)
 - Quickshell: [noctalia-qs](https://github.com/noctalia-dev/noctalia-qs)
-- Additional dependencies are listed in our [documentation](https://docs.noctalia.dev)
 
 ---
 
-## 🚀 Getting Started
+## Existing v4 users
 
-**New to Noctalia?**
-Check out our comprehensive documentation and installation guide to get up and running!
-
-<p align="center">
-  <a href="https://docs.noctalia.dev/getting-started/installation">
-    <img src="https://img.shields.io/badge/📖_Installation_Guide-A8AEFF?style=for-the-badge&logoColor=FFFFFF&labelColor=0C0D11" alt="Installation Guide" />
-  </a>
-  <a href="https://docs.noctalia.dev/getting-started/faq/">
-    <img src="https://img.shields.io/badge/❓_FAQ-A8AEFF?style=for-the-badge&logoColor=FFFFFF&labelColor=0C0D11" alt="FAQ" />
-  </a>
-  <a href="https://discord.noctalia.dev">
-    <img src="https://img.shields.io/badge/💬_Get_Help-A8AEFF?style=for-the-badge&logo=discord&logoColor=FFFFFF&labelColor=0C0D11" alt="Discord" />
-  </a>
-</p>
+Existing v4 installations may continue to work, but compatibility with current compositors, distributions, plugins, and external services is not maintained. New users should [install Noctalia v5](https://noctalia.dev/blog/announcing-noctalia-v5) instead.
 
 ---
 
@@ -119,7 +94,7 @@ Noctalia focuses on the things a shell is responsible for: status bar, panels, a
 
 ### What belongs in a plugin
 
-If a feature is useful to some users but not essential to the core shell experience, it's a great candidate for a [plugin](https://noctalia.dev/plugins/). The plugin system is designed to make this easy: plugins can add bar widgets, panels, launcher providers, desktop widgets, and more.
+If a feature is useful to some users but not essential to the core shell experience, it's a great candidate for a plugin. The v4 plugin system can add bar widgets, panels, launcher providers, desktop widgets, and more.
 
 Some examples of features that are better suited as plugins:
 - Compositor-specific extras (e.g., Steam overlay for Hyprland)
@@ -127,8 +102,6 @@ Some examples of features that are better suited as plugins:
 - Third-party service integrations (e.g., smart home controls, Tailscale)
 - Niche productivity tools (e.g., Pomodoro timer, RSS reader, Docker manager)
 - Alternative visualizations or widgets
-
-If you have an idea that fits this category, consider [building a plugin](https://docs.noctalia.dev/development/guideline) for it!
 
 ### What falls outside our scope
 
@@ -144,20 +117,9 @@ We appreciate feature suggestions, but if a request falls into this category, it
 
 ---
 
-## 🤝 Contributing
-
-We welcome contributions of any size - bug fixes, new features, documentation improvements, or custom themes and configs.
-
-**Get involved:**
-- **Found a bug?** [Open an issue](https://github.com/noctalia-dev/noctalia-shell/issues/new)
-- **Want to code?** Check out our [development guidelines](https://docs.noctalia.dev/development/guideline)
-- **Need help?** Join our [Discord](https://discord.noctalia.dev)
-
----
-
 ## 💜 Credits
 
-A heartfelt thank you to our incredible community of [**contributors**](https://github.com/noctalia-dev/noctalia-shell/graphs/contributors). We are immensely grateful for your dedicated participation and the constructive feedback you've provided, which continue to shape and improve our project for everyone.
+A heartfelt thank you to our incredible community of [**contributors**](https://github.com/noctalia-dev/noctalia-shell/graphs/contributors). We are immensely grateful for their dedicated participation and the constructive feedback they provided, which helped shape and improve Noctalia v4.
 
 ---
 
