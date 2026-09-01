@@ -43,8 +43,7 @@
 namespace {
   constexpr Logger kLog("window-switcher");
   constexpr std::size_t kGridColumns = 4;
-  constexpr float kDimOpacity = 0.20F;
-  constexpr float kPanelOpacity = 0.78F;
+  constexpr float kPanelOpacity = 0.66F;
   constexpr float kPanelPadding = 24.0F;
   constexpr float kMinCellWidth = 190.0F;
   constexpr float kMaxCellWidth = 292.0F;
@@ -1263,15 +1262,6 @@ void WindowSwitcher::buildScene(Instance& instance, std::uint32_t width, std::ui
     };
     (void)onKeyboardEvent(event);
   });
-
-  input->addChild(
-      ui::box({
-          .fill = colorSpecFromRole(ColorRole::Shadow, kDimOpacity),
-          .width = w,
-          .height = h,
-          .participatesInLayout = false,
-      })
-  );
 
   const SwitcherGridMetrics& metrics = instance.gridMetrics;
   const float panelPadding = kPanelPadding * scale;

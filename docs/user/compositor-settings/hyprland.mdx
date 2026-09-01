@@ -133,7 +133,7 @@ These previews are cached capture frames, not continuously live compositor textu
 
 ### Required layer rule
 
-The switcher requires a dedicated rule because its low-opacity scrim must still trigger blur over the composed desktop, including the current windows, rather than tunnel through them to the wallpaper. Its layer animation must also be disabled: after Alt is released, Noctalia must unmap its exclusive-keyboard layer before Hyprland can activate the selected window, and a compositor-managed exit snapshot can otherwise briefly lose the composed-desktop blur.
+The switcher requires a dedicated rule so only the opaque-enough pixels of its central acrylic container blur the composed desktop. The fullscreen layer outside that container remains transparent and leaves the desktop unchanged. Layer animation must also be disabled: after Alt is released, Noctalia must unmap its exclusive-keyboard layer before Hyprland can activate the selected window, and a compositor-managed exit snapshot can otherwise briefly lose the composed-desktop blur.
 
 Add this rule **after** broader layer rules:
 
@@ -142,12 +142,12 @@ hl.layer_rule({
   name = "noctalia-window-switcher",
   match = { namespace = "noctalia-window-switcher" },
   blur = true,
-  ignore_alpha = 0.08,
+  ignore_alpha = 0.5,
   xray = false,
   no_anim = true,
 })
 ```
 
 :::caution[Rule order matters]
-If your configuration contains catch-all `xray` or `ignore_alpha` rules, keep the exact `noctalia-window-switcher` rule after them. Otherwise Hyprland can blur only the wallpaper or skip blur behind the lighter scrim. Do not remove `no_anim = true`: it prevents the Alt-release frame from falling back to Hyprland's wallpaper-only layer snapshot.
+If your configuration contains catch-all `xray` or `ignore_alpha` rules, keep the exact `noctalia-window-switcher` rule after them. Otherwise Hyprland can blur only the wallpaper, blur the transparent exterior, or skip the central acrylic panel. Do not remove `no_anim = true`: it prevents the Alt-release frame from falling back to Hyprland's wallpaper-only layer snapshot.
 :::
