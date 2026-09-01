@@ -39,12 +39,14 @@ public:
   void setOnInvalidate(std::function<void()> callback) { m_onInvalidate = std::move(callback); }
   void setCloseHovered(bool hovered);
   void bind(
-      Renderer& renderer, const WindowSwitcherEntry& entry, bool selected, bool hovered, const ScreencopyImage* preview
+      Renderer& renderer, const WindowSwitcherEntry& entry, bool selected, bool hovered, const ScreencopyImage* preview,
+      std::uint64_t previewRevision
   );
+
 private:
   void applyVisualState();
   void applyCloseVisualState();
-  void applyPreview(Renderer& renderer, const ScreencopyImage* preview);
+  void applyPreview(Renderer& renderer, const ScreencopyImage* preview, std::uint64_t previewRevision);
   bool refreshIcon(Renderer& renderer);
   void layoutOverlays(Renderer& renderer);
 
@@ -76,9 +78,7 @@ protected:
   bool m_hovered = false;
   bool m_closeHovered = false;
   std::string m_iconPath;
-  // Identity of the preview image last uploaded into m_preview; the previews
-  // map is node-based so stable addresses mean the texture is still current.
-  const ScreencopyImage* m_previewImage = nullptr;
+  std::uint64_t m_previewRevision = 0;
   int m_iconTargetSize = 0;
   AsyncTextureCache* m_asyncTextures = nullptr;
   std::optional<ColorSpec> m_appIconColorizeTint;

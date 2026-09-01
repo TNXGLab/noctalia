@@ -9,6 +9,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_set>
 #include <unordered_map>
 #include <vector>
 
@@ -20,6 +21,10 @@ class RenderContext;
 class WaylandConnection;
 struct wl_output;
 
+struct WindowSwitcherPreview {
+  ScreencopyImage image;
+  std::uint64_t revision = 0;
+};
 // Fullscreen Alt+Tab style window switcher with a centered 5×5 grid.
 class WindowSwitcher {
 public:
@@ -49,7 +54,8 @@ private:
   void navigateGrid(int colDelta, int rowDelta);
   void activateSelected();
   void closeWindowAt(std::size_t index);
-  void queuePreviews();
+  void queuePreviews(bool refreshCached);
+  void prunePreviews();
   void startNextCapture();
   void requestSceneUpdate();
   [[nodiscard]] bool matchesTrigger(const KeyboardEvent& event) const noexcept;
@@ -73,8 +79,11 @@ private:
   std::size_t m_gridColumns = 5;
   std::unique_ptr<ToplevelCapture> m_capture;
   std::deque<std::uintptr_t> m_captureQueue;
-  // Window previews keyed by the zwlr foreign toplevel handle (entry.closeHandle).
-  std::unordered_map<std::uintptr_t, ScreencopyImage> m_previews;
+  std::unordered_set<std::uintptr_t> m_capturedThisSession;
+  std::optional<std::uintptr_t> m_captureInFlight;
+  // 跨切换会话保留缓存帧，打开时立即显示，并由后台采集替换为新帧。
+  std::unordered_map<std::uintptr_t, WindowSwitcherPreview> m_previews;
+  std::uint64_t m_nextPreviewRevision = 1;
   wl_output* m_output = nullptr;
   bool m_active = false;
 };

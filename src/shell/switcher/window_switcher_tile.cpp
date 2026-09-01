@@ -259,7 +259,8 @@ void WindowSwitcherTile::setCloseHovered(bool hovered) {
 }
 
 void WindowSwitcherTile::bind(
-    Renderer& renderer, const WindowSwitcherEntry& entry, bool selected, bool hovered, const ScreencopyImage* preview
+    Renderer& renderer, const WindowSwitcherEntry& entry, bool selected, bool hovered, const ScreencopyImage* preview,
+    std::uint64_t previewRevision
 ) {
   m_entry = entry;
   m_hasEntry = true;
@@ -285,38 +286,39 @@ void WindowSwitcherTile::bind(
     m_icon->clear(renderer);
   }
 
-  applyPreview(renderer, preview);
+  applyPreview(renderer, preview, previewRevision);
   applyVisualState();
   applyCloseVisualState();
   markLayoutDirty();
 }
 
-void WindowSwitcherTile::applyPreview(Renderer& renderer, const ScreencopyImage* preview) {
+void WindowSwitcherTile::applyPreview(
+    Renderer& renderer, const ScreencopyImage* preview, std::uint64_t previewRevision
+) {
   const bool hasPreview =
       preview != nullptr && !preview->rgba.empty() && preview->width > 0 && preview->height > 0;
 
   if (!hasPreview) {
-    if (m_previewImage != nullptr) {
+    if (m_previewRevision != 0) {
       m_preview->clear(renderer);
-      m_previewImage = nullptr;
+      m_previewRevision = 0;
     }
     m_preview->setVisible(false);
     return;
   }
 
-  // Upload only when the captured image changed: the previews map is
-  // node-based, so a stable address means this texture is still current.
-  if (preview != m_previewImage) {
+  // 缓存对象地址保持不变；后台采集就地替换像素后，修订号确保纹理仅重新上传一次。
+  if (previewRevision != m_previewRevision) {
     const bool ready = m_preview->setSourceRaw(
         renderer, preview->rgba.data(), preview->rgba.size(), preview->width, preview->height, preview->width * 4,
         PixmapFormat::RGBA, false
     );
     if (!ready) {
       m_preview->setVisible(false);
-      m_previewImage = nullptr;
+      m_previewRevision = 0;
       return;
     }
-    m_previewImage = preview;
+    m_previewRevision = previewRevision;
   }
   m_preview->setVisible(true);
   m_icon->setVisible(false);
@@ -324,8 +326,8 @@ void WindowSwitcherTile::applyPreview(Renderer& renderer, const ScreencopyImage*
 }
 
 bool WindowSwitcherTile::refreshIcon(Renderer& renderer) {
-  // A live capture replaces icon and fallback glyph entirely; keep them off.
-  if (m_previewImage != nullptr && m_preview != nullptr && m_preview->visible()) {
+  // 实时预览完整替代图标和回退字形，二者必须保持隐藏。
+  if (m_previewRevision != 0 && m_preview != nullptr && m_preview->visible()) {
     m_icon->setVisible(false);
     m_fallbackGlyph->setVisible(false);
     return true;

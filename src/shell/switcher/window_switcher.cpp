@@ -514,13 +514,15 @@ namespace {
         return;
       }
       const ScreencopyImage* preview = nullptr;
+      std::uint64_t previewRevision = 0;
       if (m_previews != nullptr) {
         if (const auto it = m_previews->find((*m_entries)[index].closeHandle); it != m_previews->end()) {
-          preview = &it->second;
+          preview = &it->second.image;
+          previewRevision = it->second.revision;
         }
       }
       windowTile->setCellSize(windowTile->width(), windowTile->height());
-      windowTile->bind(*m_renderer, (*m_entries)[index], selected, hovered, preview);
+      windowTile->bind(*m_renderer, (*m_entries)[index], selected, hovered, preview, previewRevision);
     }
 
     void onActivate(std::size_t index) override {
@@ -529,7 +531,9 @@ namespace {
       }
     }
 
-    void setPreviews(const std::unordered_map<std::uintptr_t, ScreencopyImage>* previews) { m_previews = previews; }
+    void setPreviews(const std::unordered_map<std::uintptr_t, WindowSwitcherPreview>* previews) {
+      m_previews = previews;
+    }
 
     bool onPointerPress(std::size_t index, float cellLocalX, float cellLocalY, float cellWidth, float cellHeight) override {
       if (!WindowSwitcherTile::hitTestCloseRegion(cellWidth, cellHeight, m_scale, cellLocalX, cellLocalY)) {
@@ -558,7 +562,7 @@ namespace {
     std::optional<ColorSpec> m_iconTint;
     Renderer* m_renderer = nullptr;
     const std::vector<WindowSwitcherEntry>* m_entries = nullptr;
-    const std::unordered_map<std::uintptr_t, ScreencopyImage>* m_previews = nullptr;
+    const std::unordered_map<std::uintptr_t, WindowSwitcherPreview>* m_previews = nullptr;
     std::function<void(std::size_t)> m_onActivate;
     std::function<void(std::size_t)> m_onClose;
     std::function<void()> m_onInvalidate;
@@ -635,11 +639,14 @@ void WindowSwitcher::onOutputChange() {
 
 void WindowSwitcher::onToplevelChange() {
   if (!m_active) {
+    // 切换器隐藏时预热新窗口；已有缓存等下次显示时再后台刷新。
+    refreshWindows();
+    queuePreviews(false);
     return;
   }
   const std::size_t previousCount = m_windows.size();
   refreshWindows();
-  queuePreviews();
+  queuePreviews(false);
   if (m_instance != nullptr && m_windows.size() != previousCount) {
     m_instance->gridMetrics = {};
   }
@@ -653,7 +660,6 @@ void WindowSwitcher::show(wl_output* output) {
 
   const bool wasActive = m_active;
   refreshWindows();
-  queuePreviews();
 
   m_output = output;
   if (wasActive) {
@@ -662,6 +668,10 @@ void WindowSwitcher::show(wl_output* output) {
     m_selectedIndex = m_windows.size() > 1 ? 1 : 0;
   }
   m_active = true;
+  if (!wasActive) {
+    m_capturedThisSession.clear();
+  }
+  queuePreviews(!wasActive);
 
   ensureSurface();
   if (m_instance == nullptr) {
@@ -685,11 +695,12 @@ void WindowSwitcher::hide() {
     m_capture->cancelInFlight();
   }
   m_captureQueue.clear();
-  m_previews.clear();
+  m_capturedThisSession.clear();
+  m_captureInFlight.reset();
   destroySurface();
 }
 
-void WindowSwitcher::queuePreviews() {
+void WindowSwitcher::queuePreviews(bool refreshCached) {
   if (m_wayland == nullptr || m_platform == nullptr || m_windows.empty()) {
     return;
   }
@@ -697,46 +708,86 @@ void WindowSwitcher::queuePreviews() {
     m_capture = std::make_unique<ToplevelCapture>(*m_wayland);
   }
   if (!m_capture->available()) {
-    // No hyprland-toplevel-export support; tiles keep showing app icons.
+    // 不支持 hyprland-toplevel-export 时，窗口磁贴继续显示应用图标。
     return;
   }
+
+  auto queueHandle = [this, refreshCached](std::uintptr_t key) {
+    if (key == 0
+        || (!refreshCached && m_previews.contains(key))
+        || m_capturedThisSession.contains(key)
+        || m_captureInFlight == key
+        || std::ranges::find(m_captureQueue, key) != m_captureQueue.end()) {
+      return;
+    }
+    auto* handle = reinterpret_cast<zwlr_foreign_toplevel_handle_v1*>(key);
+    if (m_platform->containsWlrToplevelHandle(handle)) {
+      m_captureQueue.push_back(key);
+    }
+  };
+
+  // 首次打开时优先降低已选磁贴的等待时间。
+  if (m_active && m_selectedIndex < m_windows.size()) {
+    queueHandle(m_windows[m_selectedIndex].closeHandle);
+  }
   for (const auto& entry : m_windows) {
-    if (entry.closeHandle == 0 || m_previews.contains(entry.closeHandle)) {
-      continue;
-    }
-    const bool alreadyQueued = std::ranges::find(m_captureQueue, entry.closeHandle) != m_captureQueue.end();
-    if (!alreadyQueued) {
-      m_captureQueue.push_back(entry.closeHandle);
-    }
+    queueHandle(entry.closeHandle);
   }
   startNextCapture();
 }
 
+void WindowSwitcher::prunePreviews() {
+  std::unordered_set<std::uintptr_t> liveHandles;
+  liveHandles.reserve(m_windows.size());
+  for (const auto& entry : m_windows) {
+    if (entry.closeHandle != 0) {
+      liveHandles.insert(entry.closeHandle);
+    }
+  }
+  std::erase_if(m_previews, [&liveHandles](const auto& item) { return !liveHandles.contains(item.first); });
+  std::erase_if(
+      m_capturedThisSession, [&liveHandles](std::uintptr_t handle) { return !liveHandles.contains(handle); }
+  );
+}
+
 void WindowSwitcher::startNextCapture() {
-  if (m_capture == nullptr || m_capture->busy() || m_captureQueue.empty()) {
+  if (m_capture == nullptr || m_capture->busy()) {
     return;
   }
-  const std::uintptr_t key = m_captureQueue.front();
-  m_captureQueue.pop_front();
-  auto* handle = reinterpret_cast<zwlr_foreign_toplevel_handle_v1*>(key);
-  if (handle == nullptr || !m_platform->containsWlrToplevelHandle(handle)) {
-    startNextCapture();
+
+  while (!m_captureQueue.empty()) {
+    const std::uintptr_t key = m_captureQueue.front();
+    m_captureQueue.pop_front();
+    auto* handle = reinterpret_cast<zwlr_foreign_toplevel_handle_v1*>(key);
+    if (handle == nullptr || !m_platform->containsWlrToplevelHandle(handle)) {
+      continue;
+    }
+
+    m_captureInFlight = key;
+    m_capture->capture(handle, false, [this, key](std::optional<ScreencopyImage> image, std::string error) {
+      m_captureInFlight.reset();
+      m_capturedThisSession.insert(key);
+      if (image.has_value()) {
+        ScreencopyImage preview = std::move(*image);
+        downscalePreview(preview, kPreviewMaxEdge);
+        WindowSwitcherPreview& cached = m_previews[key];
+        cached.image = std::move(preview);
+        cached.revision = m_nextPreviewRevision++;
+        if (m_nextPreviewRevision == 0) {
+          m_nextPreviewRevision = 1;
+        }
+      } else if (!error.empty()) {
+        // 未映射或已关闭的窗口无法采集；存在旧帧时继续使用，
+        // 否则磁贴回退到应用图标。
+        kLog.debug("window preview capture failed: {}", error);
+      }
+      if (m_active) {
+        requestSceneUpdate();
+      }
+      startNextCapture();
+    });
     return;
   }
-  m_capture->capture(handle, false, [this, key](std::optional<ScreencopyImage> image, std::string error) {
-    if (image.has_value()) {
-      ScreencopyImage preview = std::move(*image);
-      downscalePreview(preview, kPreviewMaxEdge);
-      m_previews.emplace(key, std::move(preview));
-    } else if (!error.empty()) {
-      // Unmapped or closed windows fail to capture; tiles keep their app icons.
-      kLog.debug("window preview capture failed: {}", error);
-    }
-    if (m_active) {
-      requestSceneUpdate();
-    }
-    startNextCapture();
-  });
 }
 
 void WindowSwitcher::refreshWindows() {
@@ -756,6 +807,7 @@ void WindowSwitcher::refreshWindows() {
   IconResolver iconResolver;
   const int iconSize = 96;
   buildWindowEntries(*m_platform, iconResolver, iconSize, m_windows, m_platform->focusedCompositorWindowId());
+  prunePreviews();
 
   if (selectedKey.has_value()) {
     for (std::size_t i = 0; i < m_windows.size(); ++i) {
@@ -855,7 +907,7 @@ void WindowSwitcher::closeWindowAt(std::size_t index) {
   }
 
   refreshWindows();
-  queuePreviews();
+  queuePreviews(false);
   if (m_windows.empty()) {
     hide();
     return;
