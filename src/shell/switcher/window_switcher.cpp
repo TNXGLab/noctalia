@@ -42,14 +42,15 @@
 
 namespace {
   constexpr Logger kLog("window-switcher");
-  constexpr std::size_t kGridColumns = 5;
-  constexpr float kDimOpacity = 0.62F;
-  constexpr float kMinCellWidth = 164.0F;
-  constexpr float kMaxCellWidth = 224.0F;
-  constexpr float kWindowPreviewAspect = 16.0F / 10.0F;
-  constexpr float kCaptionBlock = 48.0F;
-  // Previews live only for the switcher session; cap them so 4K windows do
-  // not pin tens of MB of RGBA each.
+  constexpr std::size_t kGridColumns = 4;
+  constexpr float kDimOpacity = 0.20F;
+  constexpr float kPanelOpacity = 0.78F;
+  constexpr float kPanelPadding = 24.0F;
+  constexpr float kMinCellWidth = 190.0F;
+  constexpr float kMaxCellWidth = 292.0F;
+  constexpr float kWindowPreviewAspect = 16.0F / 9.0F;
+  constexpr float kCaptionBlock = 34.0F;
+  // 缓存跨切换会话保留；限制分辨率以避免 4K 窗口长期占用大量 RGBA 内存。
   constexpr int kPreviewMaxEdge = 512;
   struct SwitcherGridMetrics {
     std::size_t columns = 1;
@@ -68,16 +69,16 @@ namespace {
   [[nodiscard]] SwitcherGridMetrics
   computeSwitcherGridMetrics(float screenW, float screenH, float scale, std::size_t itemCount) {
     SwitcherGridMetrics metrics;
-    metrics.colGap = Style::spaceMd * scale;
-    metrics.rowGap = Style::spaceMd * scale;
+    metrics.colGap = Style::spaceLg * scale;
+    metrics.rowGap = Style::spaceLg * scale;
 
     metrics.columns = itemCount == 0 ? 1 : std::min(kGridColumns, itemCount);
     const std::size_t rows = itemCount == 0 ? 1 : (itemCount + metrics.columns - 1) / metrics.columns;
 
-    const float sidePad = Style::spaceLg * scale * 2.0F;
+    const float sidePad = (kPanelPadding * 2.0F + Style::spaceLg * 2.0F) * scale;
     const float minCellW = kMinCellWidth * scale;
     const float maxCellW = kMaxCellWidth * scale;
-    const float captionBlock = kCaptionBlock * scale + Style::spaceSm * scale * 2.0F;
+    const float captionBlock = (kCaptionBlock + Style::spaceXs * 3.0F) * scale;
 
     const float availableW = std::max(0.0F, screenW - sidePad);
     float cellW = metrics.columns == 0
@@ -579,6 +580,7 @@ struct WindowSwitcher::Instance {
   AnimationManager animations;
   std::unique_ptr<Node> sceneRoot;
   InputArea* input = nullptr;
+  Box* panel = nullptr;
   VirtualGridView* grid = nullptr;
   Label* emptyLabel = nullptr;
   InputDispatcher inputDispatcher;
@@ -1226,9 +1228,14 @@ void WindowSwitcher::positionGrid(Instance& instance, float screenW, float scree
   if (instance.grid == nullptr) {
     return;
   }
-  instance.grid->setPosition(
-      std::round((screenW - instance.grid->width()) * 0.5F), std::round((screenH - instance.grid->height()) * 0.5F)
-  );
+  const float gridX = std::round((screenW - instance.grid->width()) * 0.5F);
+  const float gridY = std::round((screenH - instance.grid->height()) * 0.5F);
+  instance.grid->setPosition(gridX, gridY);
+
+  if (instance.panel != nullptr) {
+    const float padding = kPanelPadding * instance.uiLayoutScale;
+    instance.panel->setPosition(std::round(gridX - padding), std::round(gridY - padding));
+  }
 }
 
 void WindowSwitcher::buildScene(Instance& instance, std::uint32_t width, std::uint32_t height) {
@@ -1259,15 +1266,32 @@ void WindowSwitcher::buildScene(Instance& instance, std::uint32_t width, std::ui
 
   input->addChild(
       ui::box({
-          .fill = fixedColorSpec(rgba(0.0F, 0.0F, 0.0F, 1.0F)),
+          .fill = colorSpecFromRole(ColorRole::Shadow, kDimOpacity),
           .width = w,
           .height = h,
-          .opacity = kDimOpacity,
           .participatesInLayout = false,
       })
   );
 
   const SwitcherGridMetrics& metrics = instance.gridMetrics;
+  const float panelPadding = kPanelPadding * scale;
+  const float panelRadius = Style::scaledRadiusXl(scale) + Style::spaceSm * scale;
+  auto panel = ui::box({
+      .out = &instance.panel,
+      .fill = colorSpecFromRole(ColorRole::Surface, kPanelOpacity),
+      .radius = panelRadius,
+      .width = metrics.gridW + panelPadding * 2.0F,
+      .height = metrics.gridH + panelPadding * 2.0F,
+      .visible = !m_windows.empty(),
+      .participatesInLayout = false,
+      .configure = [panelRadius](Box& box) {
+        box.setRadius(panelRadius);
+        box.setSoftness(1.0F);
+        box.setBorder(colorSpecFromRole(ColorRole::Outline, 0.62F), Style::borderWidth);
+      },
+  });
+  panel->setHitTestVisible(false);
+  input->addChild(std::move(panel));
 
   std::optional<ColorSpec> iconTint;
   if (m_config != nullptr) {

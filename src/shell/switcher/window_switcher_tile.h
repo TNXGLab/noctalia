@@ -26,7 +26,7 @@ struct WindowSwitcherEntry {
   std::uintptr_t closeHandle = 0;
 };
 
-// Window-switcher cell: surface frame around a surface-variant icon card and title.
+// Windows 风格切换磁贴：顶部应用标题、完整窗口预览和双层焦点描边。
 class WindowSwitcherTile : public InputArea {
 public:
   WindowSwitcherTile(float contentScale, AsyncTextureCache* asyncTextures);
@@ -61,16 +61,18 @@ protected:
 
   Flex* m_layout = nullptr;
   Box* m_frame = nullptr;
+  Box* m_focusShadow = nullptr;
+  Box* m_focusRing = nullptr;
   Flex* m_inner = nullptr;
   Box* m_iconHost = nullptr;
   Flex* m_caption = nullptr;
   Box* m_closeBackdrop = nullptr;
   Glyph* m_closeGlyph = nullptr;
   Image* m_preview = nullptr;
+  Image* m_headerIcon = nullptr;
   Image* m_icon = nullptr;
   Glyph* m_fallbackGlyph = nullptr;
   Label* m_title = nullptr;
-  Label* m_subtitle = nullptr;
 
   WindowSwitcherEntry m_entry;
   bool m_hasEntry = false;
@@ -80,6 +82,7 @@ protected:
   std::string m_iconPath;
   std::uint64_t m_previewRevision = 0;
   int m_iconTargetSize = 0;
+  int m_headerIconTargetSize = 0;
   AsyncTextureCache* m_asyncTextures = nullptr;
   std::optional<ColorSpec> m_appIconColorizeTint;
   std::function<void()> m_onInvalidate;
