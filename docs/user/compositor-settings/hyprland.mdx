@@ -106,7 +106,7 @@ We also disable Hyprland's built-in layer animations for Noctalia so they do not
 hl.layer_rule({
   name = "noctalia",
   match = {
-    namespace = "^noctalia-(bar-.+|notification|dock|panel|attached-panel|osd|window-switcher)$",
+    namespace = "^noctalia-(bar-.+|notification|dock|panel|attached-panel|osd)$",
   },
   no_anim = true,
   ignore_alpha = 0.5,
@@ -114,3 +114,36 @@ hl.layer_rule({
   blur_popups = true,
 })
 ```
+
+## Window switcher previews and backdrop
+
+On Hyprland, Noctalia uses `hyprland-toplevel-export-v1` to render the real content of each window inside the Alt+Tab grid. This integration:
+
+1. Keeps the last captured frame across switcher activations, so tiles are populated immediately instead of appearing one by one.
+2. Refreshes cached frames asynchronously whenever the switcher opens, with the selected window captured first.
+3. Prewarms newly opened windows while the switcher is hidden and removes cached frames after windows close.
+
+If Hyprland cannot export a window because it is unmapped or already closed, Noctalia keeps the last cached frame. If no cached frame exists, the tile falls back to the application icon. Compositors without `hyprland-toplevel-export-v1` always use application icons.
+
+These previews are cached capture frames, not continuously live compositor textures. Video and animation inside a window update when the asynchronous refresh completes on the next switcher activation.
+
+### Required layer rule
+
+The switcher requires a dedicated rule because its blur must sample the composed desktop, including the current windows, rather than tunnel through them to the wallpaper. Its layer animation must also be disabled: after Alt is released, Noctalia must unmap its exclusive-keyboard layer before Hyprland can activate the selected window, and a compositor-managed exit snapshot can otherwise briefly lose the composed-desktop blur.
+
+Add this rule **after** broader layer rules:
+
+```lua
+hl.layer_rule({
+  name = "noctalia-window-switcher",
+  match = { namespace = "noctalia-window-switcher" },
+  blur = true,
+  ignore_alpha = 0.5,
+  xray = false,
+  no_anim = true,
+})
+```
+
+:::caution[Rule order matters]
+If your configuration contains a catch-all rule such as `namespace = ".*", xray = true`, keep the exact `noctalia-window-switcher` rule after it. Otherwise Hyprland can blur only the wallpaper while the switcher is open. Do not remove `no_anim = true`: it prevents the Alt-release frame from falling back to Hyprland's wallpaper-only layer snapshot.
+:::

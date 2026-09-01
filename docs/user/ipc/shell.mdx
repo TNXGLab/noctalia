@@ -26,7 +26,7 @@ Set `NOCTALIA_LOG_LEVEL` to `debug`, `info`, `warn`, or `error` before startup t
 
 ## Window Switcher
 
-Alt+Tab-style overlay: a dimmed fullscreen layer with a centered grid of open windows (application icon, title, optional app name). There is no `[shell.window_switcher]` configuration block yet - wire your compositor shortcut to the IPC commands below.
+Alt+Tab-style overlay: a dimmed fullscreen layer with a centered grid of open windows (window content preview when supported, title, optional app name). There is no `[shell.window_switcher]` configuration block yet - wire your compositor shortcut to the IPC commands below.
 
 | Action | Command | Description |
 |--------|---------|-------------|
@@ -48,6 +48,8 @@ While the overlay is open it takes exclusive keyboard focus on its layer surface
 - **Pointer** - click a tile to switch; click the close control on a tile to close that window
 
 The window list refreshes while the overlay stays open (new windows, closed windows, and title changes such as Discord channel switches). Selection stays on the same window when its title updates.
+
+On Hyprland, Noctalia captures each tile through `hyprland-toplevel-export-v1`. Preview frames remain cached between activations and refresh in the background, so reopening the switcher does not repopulate tiles one by one. Unsupported or uncapturable windows fall back to their application icon. Hyprland also needs a dedicated backdrop rule; see [Window switcher previews and backdrop](/noctalia/compositor-settings/hyprland/#window-switcher-previews-and-backdrop).
 
 ## Session
 
