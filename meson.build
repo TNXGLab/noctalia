@@ -372,6 +372,8 @@ foreach _p : [
     'protocols/wlr-screencopy-unstable-v1.xml'],
   ['wlr-output-management-unstable-v1',
     'protocols/wlr-output-management-unstable-v1.xml'],
+  ['hyprland-toplevel-export-v1',
+    'protocols/hyprland-toplevel-export-v1.xml'],
 ]
   _name = _p[0]
   _xml  = _p[1]
@@ -828,6 +830,7 @@ _noctalia_sources = files(
   'src/system/day_night_schedule.cpp',
   'src/system/gamma_service.cpp',
   'src/system/location_service.cpp',
+  'src/capture/toplevel_capture.cpp',
   'src/capture/screencopy_capture.cpp',
   'src/capture/screencopy_util.cpp',
   'src/capture/screenshot_service.cpp',

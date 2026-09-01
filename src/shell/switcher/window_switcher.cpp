@@ -41,7 +41,6 @@
 #include <xkbcommon/xkbcommon-keysyms.h>
 
 namespace {
-
   constexpr Logger kLog("window-switcher");
   constexpr std::size_t kGridColumns = 5;
   constexpr float kDimOpacity = 0.62F;
@@ -49,7 +48,9 @@ namespace {
   constexpr float kMaxCellWidth = 224.0F;
   constexpr float kWindowPreviewAspect = 16.0F / 10.0F;
   constexpr float kCaptionBlock = 48.0F;
-
+  // Previews live only for the switcher session; cap them so 4K windows do
+  // not pin tens of MB of RGBA each.
+  constexpr int kPreviewMaxEdge = 512;
   struct SwitcherGridMetrics {
     std::size_t columns = 1;
     float cellW = 0.0F;
@@ -179,6 +180,53 @@ namespace {
       }
     }
     return std::string(windowId);
+  }
+
+  // Box-filter downscale for switcher previews. Keeps tile textures small
+  // without a second GPU upload path.
+  void downscalePreview(ScreencopyImage& image, int maxEdge) {
+    if (image.width <= maxEdge && image.height <= maxEdge) {
+      return;
+    }
+    const double scale = std::min(
+        static_cast<double>(maxEdge) / static_cast<double>(image.width),
+        static_cast<double>(maxEdge) / static_cast<double>(image.height)
+    );
+    const int dstW = std::max(1, static_cast<int>(std::lround(static_cast<double>(image.width) * scale)));
+    const int dstH = std::max(1, static_cast<int>(std::lround(static_cast<double>(image.height) * scale)));
+
+    std::vector<std::uint8_t> dst(static_cast<std::size_t>(dstW) * static_cast<std::size_t>(dstH) * 4U);
+    for (int y = 0; y < dstH; ++y) {
+      const int sy0 = std::min(image.height - 1, static_cast<int>(static_cast<std::int64_t>(y) * image.height / dstH));
+      const int sy1 =
+          std::max(sy0 + 1, std::min(image.height, static_cast<int>(static_cast<std::int64_t>(y + 1) * image.height / dstH)));
+      for (int x = 0; x < dstW; ++x) {
+        const int sx0 = std::min(image.width - 1, static_cast<int>(static_cast<std::int64_t>(x) * image.width / dstW));
+        const int sx1 =
+            std::max(sx0 + 1, std::min(image.width, static_cast<int>(static_cast<std::int64_t>(x + 1) * image.width / dstW)));
+        std::uint32_t acc[4] = {0U, 0U, 0U, 0U};
+        std::uint32_t count = 0U;
+        for (int sy = sy0; sy < sy1; ++sy) {
+          const auto* row = image.rgba.data() + static_cast<std::size_t>(sy) * static_cast<std::size_t>(image.width) * 4U;
+          for (int sx = sx0; sx < sx1; ++sx) {
+            const auto* px = row + static_cast<std::size_t>(sx) * 4U;
+            acc[0] += px[0];
+            acc[1] += px[1];
+            acc[2] += px[2];
+            acc[3] += px[3];
+            ++count;
+          }
+        }
+        auto* dstPx = dst.data() + (static_cast<std::size_t>(y) * static_cast<std::size_t>(dstW) + static_cast<std::size_t>(x)) * 4U;
+        dstPx[0] = static_cast<std::uint8_t>(acc[0] / count);
+        dstPx[1] = static_cast<std::uint8_t>(acc[1] / count);
+        dstPx[2] = static_cast<std::uint8_t>(acc[2] / count);
+        dstPx[3] = static_cast<std::uint8_t>(acc[3] / count);
+      }
+    }
+    image.rgba = std::move(dst);
+    image.width = dstW;
+    image.height = dstH;
   }
 
   void activateWindowSwitcherEntry(CompositorPlatform& platform, const WindowSwitcherEntry& entry) {
@@ -465,8 +513,14 @@ namespace {
       if (windowTile == nullptr) {
         return;
       }
+      const ScreencopyImage* preview = nullptr;
+      if (m_previews != nullptr) {
+        if (const auto it = m_previews->find((*m_entries)[index].closeHandle); it != m_previews->end()) {
+          preview = &it->second;
+        }
+      }
       windowTile->setCellSize(windowTile->width(), windowTile->height());
-      windowTile->bind(*m_renderer, (*m_entries)[index], selected, hovered);
+      windowTile->bind(*m_renderer, (*m_entries)[index], selected, hovered, preview);
     }
 
     void onActivate(std::size_t index) override {
@@ -475,8 +529,9 @@ namespace {
       }
     }
 
-    bool
-    onPointerPress(std::size_t index, float cellLocalX, float cellLocalY, float cellWidth, float cellHeight) override {
+    void setPreviews(const std::unordered_map<std::uintptr_t, ScreencopyImage>* previews) { m_previews = previews; }
+
+    bool onPointerPress(std::size_t index, float cellLocalX, float cellLocalY, float cellWidth, float cellHeight) override {
       if (!WindowSwitcherTile::hitTestCloseRegion(cellWidth, cellHeight, m_scale, cellLocalX, cellLocalY)) {
         return false;
       }
@@ -503,6 +558,7 @@ namespace {
     std::optional<ColorSpec> m_iconTint;
     Renderer* m_renderer = nullptr;
     const std::vector<WindowSwitcherEntry>* m_entries = nullptr;
+    const std::unordered_map<std::uintptr_t, ScreencopyImage>* m_previews = nullptr;
     std::function<void(std::size_t)> m_onActivate;
     std::function<void(std::size_t)> m_onClose;
     std::function<void()> m_onInvalidate;
@@ -583,6 +639,7 @@ void WindowSwitcher::onToplevelChange() {
   }
   const std::size_t previousCount = m_windows.size();
   refreshWindows();
+  queuePreviews();
   if (m_instance != nullptr && m_windows.size() != previousCount) {
     m_instance->gridMetrics = {};
   }
@@ -596,6 +653,7 @@ void WindowSwitcher::show(wl_output* output) {
 
   const bool wasActive = m_active;
   refreshWindows();
+  queuePreviews();
 
   m_output = output;
   if (wasActive) {
@@ -623,7 +681,62 @@ void WindowSwitcher::hide() {
   m_windows.clear();
   m_selectedIndex = 0;
   m_gridColumns = kGridColumns;
+  if (m_capture != nullptr) {
+    m_capture->cancelInFlight();
+  }
+  m_captureQueue.clear();
+  m_previews.clear();
   destroySurface();
+}
+
+void WindowSwitcher::queuePreviews() {
+  if (m_wayland == nullptr || m_platform == nullptr || m_windows.empty()) {
+    return;
+  }
+  if (m_capture == nullptr) {
+    m_capture = std::make_unique<ToplevelCapture>(*m_wayland);
+  }
+  if (!m_capture->available()) {
+    // No hyprland-toplevel-export support; tiles keep showing app icons.
+    return;
+  }
+  for (const auto& entry : m_windows) {
+    if (entry.closeHandle == 0 || m_previews.contains(entry.closeHandle)) {
+      continue;
+    }
+    const bool alreadyQueued = std::ranges::find(m_captureQueue, entry.closeHandle) != m_captureQueue.end();
+    if (!alreadyQueued) {
+      m_captureQueue.push_back(entry.closeHandle);
+    }
+  }
+  startNextCapture();
+}
+
+void WindowSwitcher::startNextCapture() {
+  if (m_capture == nullptr || m_capture->busy() || m_captureQueue.empty()) {
+    return;
+  }
+  const std::uintptr_t key = m_captureQueue.front();
+  m_captureQueue.pop_front();
+  auto* handle = reinterpret_cast<zwlr_foreign_toplevel_handle_v1*>(key);
+  if (handle == nullptr || !m_platform->containsWlrToplevelHandle(handle)) {
+    startNextCapture();
+    return;
+  }
+  m_capture->capture(handle, false, [this, key](std::optional<ScreencopyImage> image, std::string error) {
+    if (image.has_value()) {
+      ScreencopyImage preview = std::move(*image);
+      downscalePreview(preview, kPreviewMaxEdge);
+      m_previews.emplace(key, std::move(preview));
+    } else if (!error.empty()) {
+      // Unmapped or closed windows fail to capture; tiles keep their app icons.
+      kLog.debug("window preview capture failed: {}", error);
+    }
+    if (m_active) {
+      requestSceneUpdate();
+    }
+    startNextCapture();
+  });
 }
 
 void WindowSwitcher::refreshWindows() {
@@ -742,6 +855,7 @@ void WindowSwitcher::closeWindowAt(std::size_t index) {
   }
 
   refreshWindows();
+  queuePreviews();
   if (m_windows.empty()) {
     hide();
     return;
@@ -1109,6 +1223,7 @@ void WindowSwitcher::buildScene(Instance& instance, std::uint32_t width, std::ui
   }
   instance.adapter = std::make_unique<WindowSwitcherGridAdapter>(scale, m_asyncTextures, iconTint);
   instance.adapter->setEntries(&m_windows);
+  instance.adapter->setPreviews(&m_previews);
   instance.adapter->setRenderer(&renderer);
   instance.adapter->setOnActivate([this](std::size_t index) {
     setSelectedIndex(index);

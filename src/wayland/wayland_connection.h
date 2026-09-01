@@ -47,6 +47,7 @@ struct hyprland_focus_grab_manager_v1;
 struct hyprland_toplevel_mapping_manager_v1;
 struct zwlr_gamma_control_manager_v1;
 struct zwlr_screencopy_manager_v1;
+struct hyprland_toplevel_export_manager_v1;
 struct wp_fractional_scale_manager_v1;
 struct wp_viewporter;
 struct zwlr_output_manager_v1;
@@ -182,7 +183,9 @@ public:
   [[nodiscard]] bool hasGammaControl() const noexcept;
   [[nodiscard]] bool hasOutputManagement() const noexcept;
   [[nodiscard]] bool hasScreencopy() const noexcept;
+  [[nodiscard]] bool hasToplevelExport() const noexcept;
   [[nodiscard]] zwlr_screencopy_manager_v1* screencopyManager() const noexcept;
+  [[nodiscard]] hyprland_toplevel_export_manager_v1* toplevelExportManager() const noexcept;
   [[nodiscard]] bool hasBackgroundEffectBlur() const noexcept;
   [[nodiscard]] zwlr_gamma_control_manager_v1* gammaControlManager() const noexcept;
   [[nodiscard]] ext_background_effect_manager_v1* backgroundEffectManager() const noexcept;
@@ -313,6 +316,7 @@ private:
   hyprland_focus_grab_manager_v1* m_hyprlandFocusGrabManager = nullptr;
   zwlr_gamma_control_manager_v1* m_gammaControlManager = nullptr;
   zwlr_screencopy_manager_v1* m_screencopyManager = nullptr;
+  hyprland_toplevel_export_manager_v1* m_toplevelExportManager = nullptr;
   zwlr_output_manager_v1* m_outputManager = nullptr;
   std::unordered_map<zwlr_output_head_v1*, WaylandOutputHeadInfo> m_outputHeads;
   std::unordered_set<zwlr_output_mode_v1*> m_outputModes;

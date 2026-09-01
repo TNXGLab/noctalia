@@ -1,6 +1,7 @@
 #include "shell/switcher/window_switcher_tile.h"
 
-#include "render/core/renderer.h"
+#include "capture/screencopy_capture.h"
+#include "render/core/texture_manager.h"
 #include "ui/builders.h"
 #include "ui/palette.h"
 #include "ui/style.h"
@@ -177,6 +178,17 @@ WindowSwitcherTile::WindowSwitcherTile(float contentScale, AsyncTextureCache* as
       })
   );
 
+  // Window capture from hyprland-toplevel-export fills the whole icon host
+  // (Cover); the host clips children with rounded corners already.
+  m_iconHost->addChild(
+      ui::image({
+          .out = &m_preview,
+          .fit = ImageFit::Cover,
+          .visible = false,
+          .participatesInLayout = false,
+      })
+  );
+
   m_icon->setAsyncReadyCallback([this]() {
     if (m_icon == nullptr || m_fallbackGlyph == nullptr || !m_icon->hasImage()) {
       return;
@@ -223,6 +235,10 @@ void WindowSwitcherTile::setCellSize(float cellWidth, float cellHeight) {
   if (m_iconHost != nullptr) {
     m_iconHost->setFrameSize(m_iconHostWidth, m_iconHostHeight);
   }
+  if (m_preview != nullptr) {
+    m_preview->setPosition(0.0F, 0.0F);
+    m_preview->setSize(m_iconHostWidth, m_iconHostHeight);
+  }
   const float captionTextWidth = std::max(0.0F, m_iconHostWidth - captionTextInset(m_contentScale) * 2.0F);
   if (m_title != nullptr) {
     m_title->setMaxWidth(captionTextWidth);
@@ -242,7 +258,9 @@ void WindowSwitcherTile::setCloseHovered(bool hovered) {
   applyCloseVisualState();
 }
 
-void WindowSwitcherTile::bind(Renderer& renderer, const WindowSwitcherEntry& entry, bool selected, bool hovered) {
+void WindowSwitcherTile::bind(
+    Renderer& renderer, const WindowSwitcherEntry& entry, bool selected, bool hovered, const ScreencopyImage* preview
+) {
   m_entry = entry;
   m_hasEntry = true;
   m_selected = selected;
@@ -267,12 +285,51 @@ void WindowSwitcherTile::bind(Renderer& renderer, const WindowSwitcherEntry& ent
     m_icon->clear(renderer);
   }
 
+  applyPreview(renderer, preview);
   applyVisualState();
   applyCloseVisualState();
   markLayoutDirty();
 }
 
+void WindowSwitcherTile::applyPreview(Renderer& renderer, const ScreencopyImage* preview) {
+  const bool hasPreview =
+      preview != nullptr && !preview->rgba.empty() && preview->width > 0 && preview->height > 0;
+
+  if (!hasPreview) {
+    if (m_previewImage != nullptr) {
+      m_preview->clear(renderer);
+      m_previewImage = nullptr;
+    }
+    m_preview->setVisible(false);
+    return;
+  }
+
+  // Upload only when the captured image changed: the previews map is
+  // node-based, so a stable address means this texture is still current.
+  if (preview != m_previewImage) {
+    const bool ready = m_preview->setSourceRaw(
+        renderer, preview->rgba.data(), preview->rgba.size(), preview->width, preview->height, preview->width * 4,
+        PixmapFormat::RGBA, false
+    );
+    if (!ready) {
+      m_preview->setVisible(false);
+      m_previewImage = nullptr;
+      return;
+    }
+    m_previewImage = preview;
+  }
+  m_preview->setVisible(true);
+  m_icon->setVisible(false);
+  m_fallbackGlyph->setVisible(false);
+}
+
 bool WindowSwitcherTile::refreshIcon(Renderer& renderer) {
+  // A live capture replaces icon and fallback glyph entirely; keep them off.
+  if (m_previewImage != nullptr && m_preview != nullptr && m_preview->visible()) {
+    m_icon->setVisible(false);
+    m_fallbackGlyph->setVisible(false);
+    return true;
+  }
   if (!m_hasEntry || m_iconPath.empty()) {
     m_icon->setVisible(false);
     m_fallbackGlyph->setVisible(true);

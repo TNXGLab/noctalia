@@ -12,6 +12,7 @@
 #include "ext-session-lock-v1-client-protocol.h"
 #include "ext-workspace-v1-client-protocol.h"
 #include "fractional-scale-v1-client-protocol.h"
+#include "hyprland-toplevel-export-v1-client-protocol.h"
 #include "hyprland-focus-grab-v1-client-protocol.h"
 #include "hyprland-toplevel-mapping-v1-client-protocol.h"
 #include "idle-inhibit-unstable-v1-client-protocol.h"
@@ -63,6 +64,8 @@ namespace {
   constexpr std::uint32_t kIdleInhibitManagerVersion = 1;
   constexpr std::uint32_t kExtBackgroundEffectManagerVersion = 1;
   constexpr std::uint32_t kFractionalScaleManagerVersion = 1;
+  constexpr std::uint32_t kToplevelExportManagerVersion = 2;
+  constexpr std::uint32_t kScreencopyManagerVersion = 3;
   constexpr std::uint32_t kHyprlandFocusGrabManagerVersion = 1;
   constexpr std::uint32_t kHyprlandToplevelMappingManagerVersion = 1;
   constexpr std::uint32_t kViewporterVersion = 1;
@@ -70,7 +73,6 @@ namespace {
   constexpr std::uint32_t kTextInputManagerVersion = 2;
   constexpr std::uint32_t kVirtualKeyboardManagerVersion = 1;
   constexpr std::uint32_t kGammaControlManagerVersion = 1;
-  constexpr std::uint32_t kScreencopyManagerVersion = 3;
   constexpr std::uint32_t kOutputManagerVersion = 4;
   constexpr std::uint32_t kOutputManagerMinVersion = 3;
 
@@ -662,6 +664,12 @@ bool WaylandConnection::hasScreencopy() const noexcept { return m_screencopyMana
 
 zwlr_gamma_control_manager_v1* WaylandConnection::gammaControlManager() const noexcept { return m_gammaControlManager; }
 
+
+bool WaylandConnection::hasToplevelExport() const noexcept { return m_toplevelExportManager != nullptr; }
+
+hyprland_toplevel_export_manager_v1*
+    WaylandConnection::toplevelExportManager() const noexcept { return m_toplevelExportManager; }
+
 zwlr_screencopy_manager_v1* WaylandConnection::screencopyManager() const noexcept { return m_screencopyManager; }
 
 std::string WaylandConnection::requestActivationToken(wl_surface* surface) const {
@@ -1233,6 +1241,14 @@ void WaylandConnection::bindGlobal(
     return;
   }
 
+  if (interfaceName == hyprland_toplevel_export_manager_v1_interface.name) {
+    const auto bindVersion = std::min(version, kToplevelExportManagerVersion);
+    m_toplevelExportManager = static_cast<hyprland_toplevel_export_manager_v1*>(
+        wl_registry_bind(registry, name, &hyprland_toplevel_export_manager_v1_interface, bindVersion)
+    );
+    return;
+  }
+
   if (interfaceName == zwlr_output_manager_v1_interface.name) {
     // head/mode release requests need v3; nothing useful to bind below that anyway.
     if (version < kOutputManagerMinVersion) {
@@ -1380,6 +1396,10 @@ void WaylandConnection::cleanup() {
   if (m_screencopyManager != nullptr) {
     zwlr_screencopy_manager_v1_destroy(m_screencopyManager);
     m_screencopyManager = nullptr;
+  }
+  if (m_toplevelExportManager != nullptr) {
+    hyprland_toplevel_export_manager_v1_destroy(m_toplevelExportManager);
+    m_toplevelExportManager = nullptr;
   }
 
   for (auto* mode : m_outputModes) {

@@ -1,12 +1,15 @@
 #pragma once
 
+#include "capture/toplevel_capture.h"
 #include "shell/switcher/window_switcher_tile.h"
 #include "wayland/wayland_seat.h"
 
 #include <cstddef>
+#include <deque>
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 class AsyncTextureCache;
@@ -46,6 +49,8 @@ private:
   void navigateGrid(int colDelta, int rowDelta);
   void activateSelected();
   void closeWindowAt(std::size_t index);
+  void queuePreviews();
+  void startNextCapture();
   void requestSceneUpdate();
   [[nodiscard]] bool matchesTrigger(const KeyboardEvent& event) const noexcept;
   [[nodiscard]] bool isModifierRelease(const KeyboardEvent& event) const noexcept;
@@ -66,6 +71,10 @@ private:
   std::vector<WindowSwitcherEntry> m_windows;
   std::size_t m_selectedIndex = 0;
   std::size_t m_gridColumns = 5;
+  std::unique_ptr<ToplevelCapture> m_capture;
+  std::deque<std::uintptr_t> m_captureQueue;
+  // Window previews keyed by the zwlr foreign toplevel handle (entry.closeHandle).
+  std::unordered_map<std::uintptr_t, ScreencopyImage> m_previews;
   wl_output* m_output = nullptr;
   bool m_active = false;
 };
