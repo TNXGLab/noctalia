@@ -170,6 +170,31 @@ void VirtualGridView::setRowGap(float gap) {
   notifyDataChanged();
 }
 
+void VirtualGridView::setCenterIncompleteRows(bool center) {
+  if (m_centerIncompleteRows == center) {
+    return;
+  }
+  m_centerIncompleteRows = center;
+  markLayoutDirty();
+}
+
+float VirtualGridView::incompleteRowOffsetX(std::size_t row) const noexcept {
+  if (!m_centerIncompleteRows || m_layoutColumns == 0 || m_cellWidth <= 0.0F || m_itemCount == 0) {
+    return 0.0F;
+  }
+  const std::size_t rowStart = row * m_layoutColumns;
+  if (rowStart >= m_itemCount) {
+    return 0.0F;
+  }
+  const std::size_t itemsInRow = std::min(m_layoutColumns, m_itemCount - rowStart);
+  if (itemsInRow >= m_layoutColumns) {
+    return 0.0F;
+  }
+  const float rowWidth =
+      static_cast<float>(itemsInRow) * m_cellWidth + static_cast<float>(itemsInRow - 1) * m_columnGap;
+  return std::max(0.0F, (m_virtualWidth - rowWidth) * 0.5F);
+}
+
 void VirtualGridView::setOverscanRows(std::size_t rows) {
   m_overscanRows = rows;
   markLayoutDirty();
@@ -393,7 +418,7 @@ void VirtualGridView::doLayout(Renderer& renderer) {
 
         slotActive[slot] = true;
 
-        const float x = static_cast<float>(visualCol(col)) * (cellW + m_columnGap);
+        const float x = incompleteRowOffsetX(row) + static_cast<float>(visualCol(col)) * (cellW + m_columnGap);
         const float y = static_cast<float>(row) * (cellH + m_rowGap);
         tile->setPosition(x, y);
         tile->setSize(cellW, cellH);
@@ -554,7 +579,7 @@ void VirtualGridView::onPoolTooltipMotion(std::size_t slot, float localX, float 
   const auto column = index % m_layoutColumns;
   const auto row = index / m_layoutColumns;
   onPointerMotion(
-      static_cast<float>(visualCol(column)) * (m_cellWidth + m_columnGap) + localX,
+      incompleteRowOffsetX(row) + static_cast<float>(visualCol(column)) * (m_cellWidth + m_columnGap) + localX,
       static_cast<float>(row) * (m_cellHeightResolved + m_rowGap) + localY
   );
 }
@@ -641,7 +666,7 @@ bool VirtualGridView::absoluteAnchorForIndex(std::size_t index, float& outX, flo
   float wx = 0.0F;
   float wy = 0.0F;
   Node::absolutePosition(m_inputArea, wx, wy);
-  outX = wx + static_cast<float>(visualCol(col)) * colStride + m_cellWidth * 0.5F;
+  outX = wx + incompleteRowOffsetX(row) + static_cast<float>(visualCol(col)) * colStride + m_cellWidth * 0.5F;
   outY = wy + static_cast<float>(row) * rowStride + m_cellHeightResolved * 0.5F;
   return true;
 }
@@ -655,15 +680,19 @@ std::optional<std::size_t> VirtualGridView::indexAt(float localX, float localY) 
   if (localX < 0.0F || localY < 0.0F || colStride <= 0.0F || rowStride <= 0.0F) {
     return std::nullopt;
   }
-  const auto colF = localX / colStride;
   const auto rowF = localY / rowStride;
-  const auto col = static_cast<std::size_t>(std::floor(colF));
   const auto row = static_cast<std::size_t>(std::floor(rowF));
+  // 居中的不满行：先扣除该行的居中偏移再算列，保证命中测试与摆放一致。
+  const float rowOffsetX = incompleteRowOffsetX(row);
+  if (localX < rowOffsetX) {
+    return std::nullopt;
+  }
+  const auto col = static_cast<std::size_t>(std::floor((localX - rowOffsetX) / colStride));
   if (col >= m_layoutColumns) {
     return std::nullopt;
   }
   // Reject the gutter region between cells.
-  const float cellLocalX = localX - static_cast<float>(col) * colStride;
+  const float cellLocalX = (localX - rowOffsetX) - static_cast<float>(col) * colStride;
   const float cellLocalY = localY - static_cast<float>(row) * rowStride;
   if (cellLocalX > m_cellWidth || cellLocalY > m_cellHeightResolved) {
     return std::nullopt;
@@ -682,7 +711,7 @@ void VirtualGridView::cellLocalAt(
   const float rowStride = m_cellHeightResolved + m_rowGap;
   const auto col = visualCol(index % m_layoutColumns);
   const auto row = index / m_layoutColumns;
-  cellLocalX = localX - static_cast<float>(col) * colStride;
+  cellLocalX = (localX - incompleteRowOffsetX(row)) - static_cast<float>(col) * colStride;
   cellLocalY = localY - static_cast<float>(row) * rowStride;
 }
 

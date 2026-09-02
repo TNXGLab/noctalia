@@ -1,10 +1,14 @@
 #include "compositors/hyprland/hyprland_runtime.h"
+#define private public
 #include "compositors/hyprland/hyprland_workspace_backend.h"
+#undef private
 
 #include <atomic>
+#include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <iostream>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <sys/socket.h>
@@ -27,6 +31,11 @@ namespace {
   constexpr std::string_view kMonitorsJson = R"([
     {"name": "WAYLAND-1", "activeWorkspace": {"id": 8, "name": "8"}}
   ])";
+  constexpr std::string_view kClientsJson = R"([
+    {"address": "0x100", "workspace": {"id": 8}, "class": "old", "title": "Old", "at": [0, 0], "focusHistoryID": 2},
+    {"address": "0x200", "workspace": {"id": 8}, "class": "current", "title": "Current", "at": [100, 0], "focusHistoryID": 0},
+    {"address": "0x300", "workspace": {"id": 8}, "class": "previous", "title": "Previous", "at": [200, 0], "focusHistoryID": 1}
+  ])";
 
   std::string replyFor(std::string_view command) {
     if (command.contains("j/workspaces")) {
@@ -34,6 +43,9 @@ namespace {
     }
     if (command.contains("j/monitors")) {
       return std::string(kMonitorsJson);
+    }
+    if (command.contains("j/clients")) {
+      return std::string(kClientsJson);
     }
     if (command.contains("j/status")) {
       return R"({"configProvider": "lua"})";
@@ -145,6 +157,29 @@ int main() {
 
     ok = orderedById("all()", backend.all()) && ok;
     ok = orderedById("forOutput()", backend.forOutput(reinterpret_cast<wl_output*>(0x1))) && ok;
+
+    // 切换器必须使用合成器已有的完整焦点历史，不能在 shell 重启后退回空间顺序。
+    const std::vector<std::int32_t> expectedFocusHistory{2, 0, 1};
+    const std::vector<std::int32_t> actualFocusHistory{
+        backend.m_toplevels.at(0x100).focusHistoryIndex,
+        backend.m_toplevels.at(0x200).focusHistoryIndex,
+        backend.m_toplevels.at(0x300).focusHistoryIndex,
+    };
+    if (actualFocusHistory != expectedFocusHistory) {
+      std::cerr << "  actual:";
+      for (const auto value : actualFocusHistory) {
+        std::cerr << ' ' << value;
+      }
+      std::cerr << '\n';
+      std::cerr << "FAIL: focus history must survive the Hyprland snapshot\n";
+      ok = false;
+    }
+    const auto focusedWindowId = backend.focusedWindowId();
+    if (focusedWindowId != std::optional<std::string>{"200"}) {
+      std::cerr << "  actual: " << focusedWindowId.value_or("<none>") << '\n';
+      std::cerr << "FAIL: focusHistoryID 0 must identify the focused window\n";
+      ok = false;
+    }
   }
 
   stop.store(true);

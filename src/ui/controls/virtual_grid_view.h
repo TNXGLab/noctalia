@@ -108,6 +108,9 @@ public:
   void setSquareCells(bool square);     // Cell height tracks cell width.
   void setColumnGap(float gap);
   void setRowGap(float gap);
+  // 最后一行不满一整行时水平居中（Windows Alt+Tab 风格）。默认关闭：常规
+  // 网格（文件对话框、壁纸选择等）保持左对齐。
+  void setCenterIncompleteRows(bool center);
   void setOverscanRows(std::size_t rows);
   // Content scale, used for the pointer travel threshold that separates a click
   // from a drag on an adapter-consumed press.
@@ -150,6 +153,8 @@ private:
   [[nodiscard]] std::size_t visualCol(std::size_t col) const noexcept {
     return Style::rtl() ? m_layoutColumns - 1 - col : col;
   }
+  // 不满一整行的行（只会是最后一行）的水平居中偏移；整行返回 0。
+  [[nodiscard]] float incompleteRowOffsetX(std::size_t row) const noexcept;
   void setOverlayHoveredForIndex(std::size_t index, bool hovered);
 
   ScrollView* m_scroll = nullptr;
@@ -171,6 +176,7 @@ private:
   float m_columnGap = 4.0F;
   float m_rowGap = 4.0F;
   std::size_t m_overscanRows = 2;
+  bool m_centerIncompleteRows = false;
   float m_scale = 1.0F;
 
   std::optional<std::size_t> m_selectedIndex;

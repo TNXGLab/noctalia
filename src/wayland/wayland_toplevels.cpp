@@ -244,6 +244,10 @@ void WaylandToplevels::onHandleState(zwlr_foreign_toplevel_handle_v1* handle, wl
     }
   }
   if (activated) {
+    // 仅在"未激活 → 激活"的边沿更新焦点序号，重复的 state 事件不会刷新。
+    if (!it->second.activated) {
+      it->second.focusOrder = ++m_nextFocusOrder;
+    }
     for (auto& [otherHandle, otherState] : m_handles) {
       if (otherHandle == handle || !otherState.activated) {
         continue;
@@ -337,6 +341,7 @@ std::vector<ToplevelInfo> WaylandToplevels::windowsForApp(
                   .appId = appId,
                   .identifier = appId + ":" + state.title,
                   .order = state.order,
+                  .focusOrder = state.focusOrder,
                   .handle = handle,
                   .outputAnnounced = state.sawOutputEnter,
               },
@@ -374,6 +379,7 @@ std::vector<ToplevelInfo> WaylandToplevels::windowsWithoutAppId(wl_output* outpu
                 .appId = {},
                 .identifier = state.title,
                 .order = state.order,
+                .focusOrder = state.focusOrder,
                 .handle = handle,
                 .outputAnnounced = state.sawOutputEnter,
             },

@@ -31,6 +31,8 @@ struct WorkspaceWindow {
   std::int32_t x = 0;
   std::int32_t y = 0;
   std::string outputName;
+  // 合成器提供的焦点历史下标；0 为当前窗口，数值越小表示越新，-1 表示未知。
+  std::int32_t focusHistoryIndex = -1;
 };
 
 struct WorkspaceWindowAssignment {
@@ -40,6 +42,7 @@ struct WorkspaceWindowAssignment {
   std::string title;
   std::int32_t x = 0;
   std::int32_t y = 0;
+  std::int32_t focusHistoryIndex = -1;
 };
 
 struct TaskbarWindowCandidate {

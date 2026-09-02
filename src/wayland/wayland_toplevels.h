@@ -27,6 +27,9 @@ struct ToplevelInfo {
   std::string appId;
   std::string identifier;
   std::uint64_t order = 0;
+  // 递增的焦点序号：窗口每次被激活时更新（0 = 从未激活）。供 Alt+Tab 式
+  // 切换器按最近使用（MRU）排序；`order` 保持创建顺序供任务栏等使用。
+  std::uint64_t focusOrder = 0;
   zwlr_foreign_toplevel_handle_v1* handle = nullptr;
   ext_foreign_toplevel_handle_v1* extHandle = nullptr;
   // True when the compositor announced the output(s) this toplevel sits on.
@@ -44,6 +47,7 @@ struct WlrToplevelSnapshot {
   bool activated = false;
   bool minimized = false;
   std::uint64_t order = 0;
+  std::uint64_t focusOrder = 0;
 };
 
 class WaylandToplevels {
@@ -99,6 +103,7 @@ public:
           .activated = state.activated,
           .minimized = state.minimized,
           .order = state.order,
+          .focusOrder = state.focusOrder,
       });
     }
   }
@@ -117,6 +122,8 @@ private:
     bool sawOutputEnter = false;
     std::uint64_t generation = 0;
     std::uint64_t order = 0;
+    // 最近一次被激活时的序号；0 表示从未激活。见 ToplevelInfo::focusOrder。
+    std::uint64_t focusOrder = 0;
   };
 
   // A toplevel whose output the compositor never announced matches every filter; one that announced
@@ -131,5 +138,6 @@ private:
   zwlr_foreign_toplevel_handle_v1* m_currentHandle = nullptr;
   std::uint64_t m_generation = 0;
   std::uint64_t m_nextOrder = 0;
+  std::uint64_t m_nextFocusOrder = 0;
   ChangeCallback m_changeCallback;
 };

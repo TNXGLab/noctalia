@@ -198,16 +198,19 @@ namespace {
     std::vector<std::uint8_t> dst(static_cast<std::size_t>(dstW) * static_cast<std::size_t>(dstH) * 4U);
     for (int y = 0; y < dstH; ++y) {
       const int sy0 = std::min(image.height - 1, static_cast<int>(static_cast<std::int64_t>(y) * image.height / dstH));
-      const int sy1 =
-          std::max(sy0 + 1, std::min(image.height, static_cast<int>(static_cast<std::int64_t>(y + 1) * image.height / dstH)));
+      const int sy1 = std::max(
+          sy0 + 1, std::min(image.height, static_cast<int>(static_cast<std::int64_t>(y + 1) * image.height / dstH))
+      );
       for (int x = 0; x < dstW; ++x) {
         const int sx0 = std::min(image.width - 1, static_cast<int>(static_cast<std::int64_t>(x) * image.width / dstW));
-        const int sx1 =
-            std::max(sx0 + 1, std::min(image.width, static_cast<int>(static_cast<std::int64_t>(x + 1) * image.width / dstW)));
+        const int sx1 = std::max(
+            sx0 + 1, std::min(image.width, static_cast<int>(static_cast<std::int64_t>(x + 1) * image.width / dstW))
+        );
         std::uint32_t acc[4] = {0U, 0U, 0U, 0U};
         std::uint32_t count = 0U;
         for (int sy = sy0; sy < sy1; ++sy) {
-          const auto* row = image.rgba.data() + static_cast<std::size_t>(sy) * static_cast<std::size_t>(image.width) * 4U;
+          const auto* row =
+              image.rgba.data() + static_cast<std::size_t>(sy) * static_cast<std::size_t>(image.width) * 4U;
           for (int sx = sx0; sx < sx1; ++sx) {
             const auto* px = row + static_cast<std::size_t>(sx) * 4U;
             acc[0] += px[0];
@@ -217,7 +220,8 @@ namespace {
             ++count;
           }
         }
-        auto* dstPx = dst.data() + (static_cast<std::size_t>(y) * static_cast<std::size_t>(dstW) + static_cast<std::size_t>(x)) * 4U;
+        auto* dstPx = dst.data()
+            + (static_cast<std::size_t>(y) * static_cast<std::size_t>(dstW) + static_cast<std::size_t>(x)) * 4U;
         dstPx[0] = static_cast<std::uint8_t>(acc[0] / count);
         dstPx[1] = static_cast<std::uint8_t>(acc[1] / count);
         dstPx[2] = static_cast<std::uint8_t>(acc[2] / count);
@@ -321,7 +325,10 @@ namespace {
     std::string workspaceKey;
     std::int32_t sortX = 0;
     std::int32_t sortY = 0;
+    std::int32_t focusHistoryIndex = -1;
     std::uint64_t toplevelOrder = 0;
+    // 最近使用序号（来自 wlr toplevel 的 focusOrder，0 = 从未激活）。
+    std::uint64_t mruOrder = 0;
   };
 
   [[nodiscard]] WindowSwitcherEntry makeEntryFromAssignment(
@@ -413,6 +420,7 @@ namespace {
       candidate.workspaceKey = assignment.workspaceKey;
       candidate.sortX = assignment.x;
       candidate.sortY = assignment.y;
+      candidate.focusHistoryIndex = assignment.focusHistoryIndex;
       if (const auto live = liveToplevelById.find(key); live != liveToplevelById.end()) {
         if (!live->second.title.empty()) {
           candidate.entry.title = live->second.title;
@@ -421,6 +429,7 @@ namespace {
           candidate.entry.closeHandle = wlrHandle;
         }
         candidate.toplevelOrder = live->second.order;
+        candidate.mruOrder = live->second.focusOrder;
       }
       addCandidate(std::move(candidate), key);
     }
@@ -436,10 +445,25 @@ namespace {
         candidate.entry.windowId = *mappedId;
       }
       candidate.toplevelOrder = info.order;
+      candidate.mruOrder = info.focusOrder;
       addCandidate(std::move(candidate), key);
     }
 
+    // Windows 的 Alt+Tab 顺序来自窗口 Z-order，也就是当前窗口在首位，其余窗口按
+    // 最近使用顺序排列。优先采用合成器的完整焦点历史（Hyprland 在 shell 启动前
+    // 已积累该历史）；没有该信息时使用会话内 wlr 激活序号。
     std::ranges::stable_sort(candidates, [](const WindowSwitcherCandidate& a, const WindowSwitcherCandidate& b) {
+      const bool aHasCompositorHistory = a.focusHistoryIndex >= 0;
+      const bool bHasCompositorHistory = b.focusHistoryIndex >= 0;
+      if (aHasCompositorHistory != bHasCompositorHistory) {
+        return aHasCompositorHistory;
+      }
+      if (aHasCompositorHistory && a.focusHistoryIndex != b.focusHistoryIndex) {
+        return a.focusHistoryIndex < b.focusHistoryIndex;
+      }
+      if (a.mruOrder != b.mruOrder) {
+        return a.mruOrder > b.mruOrder;
+      }
       if (a.workspaceKey != b.workspaceKey) {
         return a.workspaceKey < b.workspaceKey;
       }
@@ -535,7 +559,8 @@ namespace {
       m_previews = previews;
     }
 
-    bool onPointerPress(std::size_t index, float cellLocalX, float cellLocalY, float cellWidth, float cellHeight) override {
+    bool
+    onPointerPress(std::size_t index, float cellLocalX, float cellLocalY, float cellWidth, float cellHeight) override {
       if (!WindowSwitcherTile::hitTestCloseRegion(cellWidth, cellHeight, m_scale, cellLocalX, cellLocalY)) {
         return false;
       }
@@ -746,9 +771,7 @@ void WindowSwitcher::prunePreviews() {
     }
   }
   std::erase_if(m_previews, [&liveHandles](const auto& item) { return !liveHandles.contains(item.first); });
-  std::erase_if(
-      m_capturedThisSession, [&liveHandles](std::uintptr_t handle) { return !liveHandles.contains(handle); }
-  );
+  std::erase_if(m_capturedThisSession, [&liveHandles](std::uintptr_t handle) { return !liveHandles.contains(handle); });
 }
 
 void WindowSwitcher::startNextCapture() {
@@ -1328,6 +1351,8 @@ void WindowSwitcher::buildScene(Instance& instance, std::uint32_t width, std::ui
                 grid.setMaxWidth(gridW);
                 grid.setMaxHeight(gridH);
                 grid.setSize(gridW, gridH);
+                // Windows 风格：最后一行不满时水平居中。
+                grid.setCenterIncompleteRows(true);
               },
       })
   );

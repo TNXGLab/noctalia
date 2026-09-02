@@ -173,6 +173,7 @@ std::vector<WorkspaceWindow> HyprlandWorkspaceBackend::workspaceWindows(wl_outpu
             .x = toplevel.x,
             .y = toplevel.y,
             .outputName = {},
+            .focusHistoryIndex = toplevel.focusHistoryIndex,
         }
     );
   }
@@ -478,6 +479,9 @@ void HyprlandWorkspaceBackend::refreshClients() {
       state.x = (*atIt)[0].get<std::int32_t>();
       state.y = (*atIt)[1].get<std::int32_t>();
     }
+    if (const auto focusIt = item.find("focusHistoryID"); focusIt != item.end() && focusIt->is_number_integer()) {
+      state.focusHistoryIndex = focusIt->get<std::int32_t>();
+    }
 
     bool urgent = false;
     bool urgentSet = false;
@@ -493,11 +497,10 @@ void HyprlandWorkspaceBackend::refreshClients() {
     }
 
     state.urgent = urgent;
-    next.emplace(*address, std::move(state));
-
-    if (item.value("focused", false)) {
+    if (state.focusHistoryIndex == 0 || item.value("focused", false)) {
       m_focusedWindowId = compositors::hyprland::formatWindowAddress(*address);
     }
+    next.emplace(*address, std::move(state));
   }
 
   m_toplevels = std::move(next);

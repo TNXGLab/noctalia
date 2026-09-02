@@ -1381,6 +1381,7 @@ std::vector<WorkspaceWindowAssignment> CompositorPlatform::workspaceWindowAssign
             .title = window.title,
             .x = window.x,
             .y = window.y,
+            .focusHistoryIndex = window.focusHistoryIndex,
         }
     );
   }

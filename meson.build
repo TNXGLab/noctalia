@@ -1215,6 +1215,7 @@ if build_tests
     'ui_tree_reconciler',
     'upower_charge_limit',
     'upower_device_catalog',
+    'virtual_grid_view_centering',
     'virtual_grid_view_gesture',
     'wayland_output_scale',
     'wayland_toplevels_identity',
