@@ -1,0 +1,108 @@
+name: Publish Arch package
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-arch-repo
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    name: Build and publish x86_64 package
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      ARCH_REPO: git@github.com:TNXGLab/arch-repo.git
+      ARCH_REPO_BRANCH: gh-pages
+      PACKAGE_REPOSITORY: noctalia
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install build dependencies
+        run: |
+          set -euo pipefail
+          pacman -Syu --noconfirm --needed \
+            base-devel git openssh \
+            cairo curl fontconfig freetype2 gcc-libs glib2 glibc hicolor-icon-theme jemalloc \
+            libglvnd libical libjxl libpipewire libqalculate librsvg libsecret \
+            libsndfile libsodium libwebp libwireplumber libxkbcommon libxml2 \
+            md4c pam polkit pango sdbus-cpp tomlplusplus wayland \
+            meson ninja nlohmann-json pkgconf stb wayland-protocols
+
+      - name: Build package
+        id: package
+        env:
+          NOCTALIA_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          useradd --create-home builduser
+          install -d -o builduser -g builduser /tmp/noctalia-package
+          install -o builduser -g builduser -m 0644 packaging/arch/PKGBUILD /tmp/noctalia-package/PKGBUILD
+          runuser -u builduser -- env NOCTALIA_COMMIT="$NOCTALIA_COMMIT" \
+            bash -lc 'cd /tmp/noctalia-package && makepkg --cleanbuild --clean --noconfirm'
+          package_path=$(printf '%s\n' /tmp/noctalia-package/noctalia-*.pkg.tar.zst)
+          test -f "$package_path"
+          echo "path=$package_path" >> "$GITHUB_OUTPUT"
+          echo "filename=$(basename "$package_path")" >> "$GITHUB_OUTPUT"
+
+      - name: Configure repository deploy key
+        env:
+          ARCH_REPO_SSH_KEY: ${{ secrets.ARCH_REPO_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$ARCH_REPO_SSH_KEY"
+          install -d -m 0700 /root/.ssh
+          printf '%s\n' "$ARCH_REPO_SSH_KEY" > /root/.ssh/id_ed25519
+          chmod 0600 /root/.ssh/id_ed25519
+          ssh-keyscan -H github.com > /root/.ssh/known_hosts
+
+      - name: Update pacman repository
+        env:
+          PACKAGE_PATH: ${{ steps.package.outputs.path }}
+          PACKAGE_FILENAME: ${{ steps.package.outputs.filename }}
+        run: |
+          set -euo pipefail
+          git clone --branch "$ARCH_REPO_BRANCH" --single-branch "$ARCH_REPO" /tmp/arch-repo
+          cd /tmp/arch-repo
+          install -d x86_64
+          rm -f x86_64/noctalia-*.pkg.tar.zst
+          rm -f x86_64/tar.db x86_64/tar.db.tar.gz x86_64/tar.files x86_64/tar.files.tar.gz
+          install -m 0644 "$PACKAGE_PATH" "x86_64/$PACKAGE_FILENAME"
+          repo-add -R "x86_64/${PACKAGE_REPOSITORY}.db.tar.gz" "x86_64/$PACKAGE_FILENAME"
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add x86_64
+          if git diff --cached --quiet; then
+            echo 'Arch repository is already current.'
+            exit 0
+          fi
+          git commit -m "chore(repo): publish $PACKAGE_FILENAME"
+          git push origin "$ARCH_REPO_BRANCH"
+
+      - name: Summarize package
+        env:
+          PACKAGE_FILENAME: ${{ steps.package.outputs.filename }}
+        run: |
+          {
+            echo '## Arch repository publication'
+            echo
+            echo "- Package: \`$PACKAGE_FILENAME\`"
+            echo "- Source commit: \`${GITHUB_SHA}\`"
+            echo '- Repository: https://tnxglab.github.io/arch-repo/x86_64'
+          } >> "$GITHUB_STEP_SUMMARY"

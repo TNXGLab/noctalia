@@ -3,6 +3,12 @@ build*/
 cmake-build-*/
 compile_commands.json
 
+# 本地 Arch 打包工作区
+/packaging/arch/gh-pages/
+/packaging/arch/pkg/
+/packaging/arch/src/
+/packaging/arch/*.pkg.tar.*
+
 # Python cache
 __pycache__
 

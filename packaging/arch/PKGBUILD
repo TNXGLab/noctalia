@@ -1,0 +1,80 @@
+# Maintainer: TNXGLab <https://github.com/TNXGLab>
+
+pkgname=noctalia
+pkgver=5.0.0.r0.000000000+tnxg
+pkgrel=1
+pkgdesc='A sleek, customizable desktop shell crafted for Wayland'
+arch=('x86_64')
+url='https://github.com/TNXGLab/noctalia'
+license=('MIT')
+options=('!debug')
+depends=(
+  'bash'
+  'cairo'
+  'curl'
+  'fontconfig'
+  'freetype2'
+  'gcc-libs'
+  'git'
+  'glib2'
+  'glibc'
+  'hicolor-icon-theme'
+  'jemalloc'
+  'libglvnd'
+  'libical'
+  'libjxl'
+  'libpipewire'
+  'libqalculate'
+  'librsvg'
+  'libsecret'
+  'libsndfile'
+  'libsodium'
+  'libwebp'
+  'libwireplumber'
+  'libxkbcommon'
+  'libxml2'
+  'md4c'
+  'pam'
+  'polkit'
+  'pango'
+  'sdbus-cpp'
+  'tomlplusplus'
+  'wayland'
+)
+makedepends=(
+  'meson'
+  'ninja'
+  'nlohmann-json'
+  'pkgconf'
+  'stb'
+  'wayland-protocols'
+)
+conflicts=('noctalia-git' 'noctalia-bin')
+_source_ref="${NOCTALIA_COMMIT:+#commit=${NOCTALIA_COMMIT}}"
+source=("${pkgname}::git+${url}.git${_source_ref}")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "${srcdir}/${pkgname}"
+  local base_version
+  base_version=$(sed -n "s/.*version: '\([^']*\)'.*/\1/p" meson.build | head -n1)
+  printf '%s.r%s.%s+tnxg' \
+    "${base_version}" \
+    "$(git rev-list --count HEAD)" \
+    "$(git rev-parse --short=9 HEAD)"
+}
+
+build() {
+  CXXFLAGS+=' -Wno-unused-result'
+  arch-meson "${srcdir}/${pkgname}" build-release \
+    -Db_ndebug=true \
+    -Dtests=disabled
+  meson compile -C build-release
+}
+
+package() {
+  meson install -C build-release --destdir "${pkgdir}"
+
+  install -Dm644 "${srcdir}/${pkgname}/LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+  install -Dm644 "${srcdir}/${pkgname}/README.md" "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+}
