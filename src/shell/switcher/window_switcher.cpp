@@ -10,6 +10,7 @@
 #include "core/input/keybind_matcher.h"
 #include "core/log.h"
 #include "core/ui_phase.h"
+#include "cursor-shape-v1-client-protocol.h"
 #include "i18n/i18n.h"
 #include "ipc/ipc_service.h"
 #include "render/animation/animation_manager.h"
@@ -1331,6 +1332,7 @@ void WindowSwitcher::buildScene(Instance& instance, std::uint32_t width, std::ui
           .columnGap = metrics.colGap,
           .rowGap = metrics.rowGap,
           .overscanRows = 1,
+          .itemCursorShape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_POINTER,
           .adapter = instance.adapter.get(),
           .width = metrics.gridW,
           .height = metrics.gridH,
